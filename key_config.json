@@ -1,0 +1,14 @@
+{
+    "power": [
+        "echo 'Power button - Command 1' && date",
+        "echo 'Power button - Command 2' && uptime"
+    ],
+    "volup": [
+        "echo 'Volume Up - Command 1' && ls -l",
+        "echo 'Volume Up - Command 2' && pwd"
+    ],
+    "voldown": [
+        "echo 'Volume Down - Command 1' && whoami",
+        "echo 'Volume Down - Command 2' && hostname"
+    ]
+} 

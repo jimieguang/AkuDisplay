@@ -1,0 +1,19 @@
+# Compilation commands for files in current directory
+
+# show_text.c - Text display program using framebuffer and FreeType
+gcc -o show_text show_text.c -lfreetype -I/usr/include/freetype2
+
+# show_image.c - Image display program using framebuffer
+gcc -o show_image show_image.c -lm
+
+# key_monitor.c - Key event monitoring program
+gcc -o key_monitor key_monitor.c
+
+# test.c - Test program for framebuffer
+gcc -o test test.c
+
+# boot.c - Main program for handling key events, animations, and system control
+# Requires json-c library for configuration file parsing
+# Handles power button, volume buttons, battery status, and idle animations
+# Supports single click, double click, and long press actions
+gcc boot.c -o sys_boot -ljson-c
