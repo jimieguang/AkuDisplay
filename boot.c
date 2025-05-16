@@ -32,7 +32,8 @@ void cleanup_script_config(void);
 void led_on(void);
 void led_off(void);
 void led_blink(void);
-void display_text(const char *text);  // 添加新函数声明
+void display_text(const char *text);
+void check_monitored_process(void);
 
 // 全局变量
 #define VOLUME_MIN 0
@@ -49,6 +50,7 @@ static time_t last_activity_time = 0;
 static int animation_pid = -1;
 static int is_idle = 1;  // 是否处于空闲状态  1 为空闲 0 为非空闲
 static int animation_enabled = 1;  // 是否允许播放动画 1 为允许 0 为禁止
+static int monitored_process_running = 0; //是否检测到进程运行
 
 // 为每个按键设置独立的长按计数器
 static struct {
@@ -65,11 +67,13 @@ static struct {
     char *power_scripts[2];
     char *volup_scripts[2];
     char *voldown_scripts[2];
+    char *monitored_processes[5];   // 支持最多 5 个被监控进程
     int is_loaded;
 } script_config = {
     .power_scripts = {NULL, NULL},
     .volup_scripts = {NULL, NULL},
     .voldown_scripts = {NULL, NULL},
+    .monitored_processes = {NULL, NULL, NULL, NULL, NULL},  // 初始化数组为空
     .is_loaded = 0
 };
 
@@ -150,6 +154,17 @@ void load_script_config(void) {
         script_config.voldown_scripts[1] = strdup(json_object_get_string(json_object_array_get_idx(voldown_obj, 1)));
     }
 
+    // 加载被监控的进程列表（数组）
+    json_object *monitored_processes_obj;
+    if (json_object_object_get_ex(root, "monitored_processes", &monitored_processes_obj))
+    {
+        script_config.monitored_processes[0] = strdup(json_object_get_string(json_object_array_get_idx(monitored_processes_obj, 0)));
+        script_config.monitored_processes[1] = strdup(json_object_get_string(json_object_array_get_idx(monitored_processes_obj, 1)));
+        script_config.monitored_processes[2] = strdup(json_object_get_string(json_object_array_get_idx(monitored_processes_obj, 2)));
+        script_config.monitored_processes[3] = strdup(json_object_get_string(json_object_array_get_idx(monitored_processes_obj, 3)));
+        script_config.monitored_processes[4] = strdup(json_object_get_string(json_object_array_get_idx(monitored_processes_obj, 4)));
+    }
+    
     json_object_put(root);
     script_config.is_loaded = 1;
 }
@@ -160,6 +175,9 @@ void cleanup_script_config(void) {
         free(script_config.power_scripts[i]);
         free(script_config.volup_scripts[i]);
         free(script_config.voldown_scripts[i]);
+    }
+    for (int i = 0; i < 5; i++) {
+        free(script_config.monitored_processes[i]);
     }
 }
 
@@ -661,6 +679,50 @@ void handle_idle_state(void) {
     }
 }
 
+// 检查被监控的进程
+void check_monitored_process(void) {
+    if (!script_config.is_loaded) {
+        load_script_config();
+    }
+
+    int any_running = 0;  // 是否有任何进程在运行
+
+    for (int i = 0; i < 5; i++) {
+        const char *proc_name = script_config.monitored_processes[i];
+        if (proc_name == NULL || strlen(proc_name) == 0) {
+            continue;
+        }
+
+        char cmd[256];
+        snprintf(cmd, sizeof(cmd), "pgrep -x %s > /dev/null 2>&1", proc_name);
+
+        int result = system(cmd);
+
+        if (result == 0) {
+            any_running = 1;
+            break;  // 只要有一个进程运行，就不恢复动画
+        }
+    }
+
+    // 有进程运行
+    if (any_running) {
+        if (monitored_process_running == 0) {
+            stop_animation();
+            animation_enabled = 0;
+            monitored_process_running = 1;
+            printf("检测到至少一个进程正在运行，已停止动画\n");
+        }
+    }
+    // 所有进程都未运行
+    else {
+        if (monitored_process_running == 1) {
+            animation_enabled = 1;
+            monitored_process_running = 0;
+            printf("未检测到任何被监控进程，已恢复动画播放\n");
+        }
+    }
+}
+
 int main(int argc, char *argv[]) {
     int fd0, fd1;
     struct input_event ev;
@@ -723,6 +785,9 @@ int main(int argc, char *argv[]) {
         if (is_idle){
             check_battery_status();
         }
+        
+        // 新增：检查被监控的进程
+        check_monitored_process();
         
         // 等待事件
         int ret = poll(fds, 2, 100);  // 100毫秒超时

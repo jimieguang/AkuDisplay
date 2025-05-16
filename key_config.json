@@ -10,5 +10,12 @@
     "voldown": [
         "echo 'Volume Down - Command 1' && whoami",
         "echo 'Volume Down - Command 2' && hostname"
+    ],
+    "monitored_processes": [
+        "showtime",
+        "XIAOZHI_AI_GUI",
+        "example01",
+        "example02",
+        "example03"
     ]
 } 
