@@ -14,6 +14,23 @@
 #include <dirent.h>
 #include <json-c/json.h>  // 添加JSON支持
 
+// 页面定义
+#define MAX_PAGES 4  // 最大页面数
+
+// 页面状态
+static struct {
+    int current_page;    // 当前页面索引
+} page_state = {
+    .current_page = 0
+};
+
+// 页面配置结构
+static struct {
+    char *name;
+    char *start_cmd;
+    char *stop_cmd;
+} page_config[MAX_PAGES];
+
 // 函数声明
 void play_animation(const char *animation_name, int loop_once, int delay);
 void stop_animation(void);
@@ -24,7 +41,6 @@ void handle_random_animation(void);
 void cleanup(int signum);
 int get_current_volume(void);
 void play_random_animation(const char *path);
-void handle_idle_state(void);
 void handle_key_event(int key_code, int value);
 void execute_command(const char *command);
 void load_script_config(void);
@@ -32,22 +48,21 @@ void cleanup_script_config(void);
 void led_on(void);
 void led_off(void);
 void led_blink(void);
-void display_text(const char *text);  // 添加新函数声明
+void display_text(const char *text);
+void display_current_page(void);
+void switch_to_next_page(void);
 
 // 全局变量
 #define VOLUME_MIN 0
 #define VOLUME_MAX 63
 #define VOLUME_STEP 1
 #define BATTERY_CHECK_INTERVAL 5  // 电池检查间隔(秒)
-#define IDLE_TIME_THRESHOLD 5    // 空闲时间阈值(秒)
 #define DOUBLE_CLICK_THRESHOLD 300  // 双击时间阈值(毫秒)
 #define LONG_PRESS_THRESHOLD 800  // 长按时间阈值(毫秒)
 
 static int current_volume = 0;
 static int charging_status = 0;
-static time_t last_activity_time = 0;
 static int animation_pid = -1;
-static int is_idle = 1;  // 是否处于空闲状态  1 为空闲 0 为非空闲
 static int animation_enabled = 1;  // 是否允许播放动画 1 为允许 0 为禁止
 
 // 为每个按键设置独立的长按计数器
@@ -129,7 +144,27 @@ void load_script_config(void) {
         return;
     }
 
-    // 加载电源键配置
+    // 加载页面配置
+    json_object *pages_obj;
+    if (json_object_object_get_ex(root, "pages", &pages_obj)) {
+        for (int i = 0; i < MAX_PAGES; i++) {
+            json_object *page_obj = json_object_array_get_idx(pages_obj, i);
+            if (page_obj) {
+                json_object *name_obj, *start_cmd_obj, *stop_cmd_obj;
+                
+                if (json_object_object_get_ex(page_obj, "name", &name_obj))
+                    page_config[i].name = strdup(json_object_get_string(name_obj));
+                
+                if (json_object_object_get_ex(page_obj, "start_cmd", &start_cmd_obj))
+                    page_config[i].start_cmd = strdup(json_object_get_string(start_cmd_obj));
+                
+                if (json_object_object_get_ex(page_obj, "stop_cmd", &stop_cmd_obj))
+                    page_config[i].stop_cmd = strdup(json_object_get_string(stop_cmd_obj));
+            }
+        }
+    }
+
+    // 加载按键脚本配置
     json_object *power_obj;
     if (json_object_object_get_ex(root, "power", &power_obj)) {
         script_config.power_scripts[0] = strdup(json_object_get_string(json_object_array_get_idx(power_obj, 0)));
@@ -156,6 +191,14 @@ void load_script_config(void) {
 
 // 清理配置
 void cleanup_script_config(void) {
+    // 清理页面配置
+    for (int i = 0; i < MAX_PAGES; i++) {
+        free(page_config[i].name);
+        free(page_config[i].start_cmd);
+        free(page_config[i].stop_cmd);
+    }
+    
+    // 清理按键脚本配置
     for (int i = 0; i < 2; i++) {
         free(script_config.power_scripts[i]);
         free(script_config.volup_scripts[i]);
@@ -194,7 +237,6 @@ void execute_command(const char *command) {
 // 显示文字的辅助函数
 void display_text(const char *text) {
     if (!animation_enabled) return;  // 如果显示被禁用，直接返回
-    
     pid_t pid = fork();
     if (pid == 0) {
         execl("./show_text", "./show_text", text, "24", "0xFFFF", "1", "1", NULL);
@@ -218,8 +260,8 @@ void process_key_action(int key_code, int action_type) {
     switch (key_code) {
         case KEY_POWER:
             if (action_type == 1) {
-                // 单击：显示电池信息
-                show_battery_info();
+                // 单击：切换到下一个页面
+                switch_to_next_page();
             } 
             else if (action_type == 2) {
                 // 停止当前动画
@@ -243,6 +285,9 @@ void process_key_action(int key_code, int action_type) {
                 if (clear_pid == 0) {
                     execl("./show_text", "./show_text", "", "24", "0xFFFF", "1", "1", NULL);
                     exit(1);
+                }
+                if(animation_enabled){
+                    display_current_page();
                 }
             }
             else if (action_type == 3) {
@@ -476,10 +521,6 @@ void update_volume(int change) {
         snprintf(cmd, sizeof(cmd), "amixer set 'Power Amplifier' %d > /dev/null 2>&1", new_volume);
         system(cmd);
         current_volume = new_volume;
-        
-        char text[128];
-        snprintf(text, sizeof(text), "Volume: %d", current_volume);
-        display_text(text);
     }
     printf("当前音量: %d\n", new_volume);
 }
@@ -499,7 +540,6 @@ void check_battery_status() {
                 play_animation("charging", 0, 100);  // 充电动画无限循环
             } else {
                 stop_animation();  // 停止充电动画
-                handle_idle_state(); // 处理空闲状态
             }
         } else if (charging_status && animation_pid <= 0) {
             // 如果正在充电但没有动画在运行，重新启动动画
@@ -633,32 +673,42 @@ void play_random_animation(const char *path) {
     free(folders);
 }
 
-// 检查空闲状态并处理随机动画
-void handle_idle_state(void) {
-    time_t now = time(NULL);
-    
-    // 如果当前有动画在运行，不处理空闲状态
-    if (animation_pid > 0) {
-        return;
-    }
-    
-    // 检查是否处于空闲状态（限制检测频率）
-    if (now - last_activity_time >= IDLE_TIME_THRESHOLD) {
-        if (is_idle) {
+// 显示当前页面
+void display_current_page(void) {
+    switch (page_state.current_page) {
+        case 0:  // 表情页面
             if (animation_enabled) {
                 play_random_animation("./emotions");
-                printf("设备进入空闲状态，开始播放随机动画\n");
-            }else{
-                // 输出可能会造成性能问题，实际运行时注释掉
-                // printf("设备进入空闲状态，但空闲动画已被禁用\n");
             }
-            
-        }
-        else{
-            is_idle = 1;
-            printf("设备进入空闲状态\n");
-        }
+            break;
+        default:  // 其他页面
+            printf("显示页面: %s\n", page_config[page_state.current_page].name);
+            display_text(page_config[page_state.current_page].name);
+            usleep(100000);
+            if (page_config[page_state.current_page].start_cmd && 
+                page_config[page_state.current_page].start_cmd[0] != '\0') {
+                execute_command(page_config[page_state.current_page].start_cmd);
+            }
+            break;
     }
+}
+
+// 切换到下一个页面
+void switch_to_next_page(void) {
+    // 如果当前页面有停止命令，执行它
+    if (page_state.current_page > 0 && 
+        page_config[page_state.current_page].stop_cmd && 
+        page_config[page_state.current_page].stop_cmd[0] != '\0') {
+        execute_command(page_config[page_state.current_page].stop_cmd);
+    }
+    
+    // 如果当前是表情页面，先停止动画
+    if (page_state.current_page == 0) {
+        stop_animation();
+    }
+    
+    page_state.current_page = (page_state.current_page + 1) % MAX_PAGES;
+    display_current_page();
 }
 
 int main(int argc, char *argv[]) {
@@ -710,17 +760,16 @@ int main(int argc, char *argv[]) {
     }
     
     printf("开始监控按键事件...\n");
+    // 显示初始页面
+    display_current_page();
     
     // 循环读取输入事件
     while (1) {
-        // 处理空闲状态
-        handle_idle_state();
-        
         // 检查待处理的点击事件
         check_pending_clicks();
         
-        // 如果处于空闲状态，检查电池状态
-        if (is_idle){
+        // 只在表情界面（页面0）检查电池状态
+        if (page_state.current_page == 0) {
             check_battery_status();
         }
         
@@ -731,9 +780,6 @@ int main(int argc, char *argv[]) {
             if (fds[0].revents & POLLIN) {
                 if (read(fd0, &ev, sizeof(struct input_event)) == sizeof(struct input_event)) {
                     if (ev.type == EV_KEY) {
-                        last_activity_time = time(NULL);
-                        is_idle = 0;  // 重置为非空闲状态
-                        
                         if (ev.code == KEY_POWER) {
                             // printf("检测到电源键事件，value = %d\n", ev.value);
                             handle_key_event(KEY_POWER, ev.value);
@@ -746,8 +792,6 @@ int main(int argc, char *argv[]) {
             if (fds[1].revents & POLLIN) {
                 if (read(fd1, &ev, sizeof(struct input_event)) == sizeof(struct input_event)) {
                     if (ev.type == EV_KEY) {
-                        last_activity_time = time(NULL);
-                        is_idle = 0;  // 重置为非空闲状态
                         handle_key_event(ev.code, ev.value);
                     }
                 }

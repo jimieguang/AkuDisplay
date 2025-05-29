@@ -1,4 +1,26 @@
 {
+    "pages": [
+        {
+            "name": "Emotions",
+            "start_cmd": "",
+            "stop_cmd": ""
+        },
+        {
+            "name": "TimeShow",
+            "start_cmd": "../aku-showtime_v2/showtime",
+            "stop_cmd": "killall showtime"
+        },
+        {
+            "name": "Page 2",
+            "start_cmd": "app2_start.sh",
+            "stop_cmd": "app2_stop.sh"
+        },
+        {
+            "name": "Page 3",
+            "start_cmd": "app3_start.sh",
+            "stop_cmd": "app3_stop.sh"
+        }
+    ],
     "power": [
         "echo 'Power button - Command 1' && date",
         "echo 'Power button - Command 2' && uptime"
