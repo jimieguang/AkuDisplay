@@ -1,0 +1,5 @@
+# Normalize line endings; device-side files must stay LF
+* text=auto
+*.sh text eol=lf
+*.service text eol=lf
+*.ps1 text eol=crlf

@@ -1,58 +1,19 @@
-# Prerequisites
-*.d
+# --- third-party binaries (download separately) ---
+platform-tools/
+sshpass.exe
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# --- local-only debug artifacts & scratch ---
+archive/
+.zcode/
 
-# Linker output
-*.ilk
-*.map
-*.exp
+# --- screenshot / transfer intermediates ---
+*.raw
+*_b64.txt
+fb*.png
+menu*.png
+nb_*.png
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
-*.pdb
-
-# Build directory
-build/
-bin/
-
-# IDE specific files
+# --- editor / OS noise ---
 .vscode/
-.idea/
-*.swp
-*~
-
-# Project specific
-*.bmp
-/animations/
-/scripts/ 
+Thumbs.db
+*.bak

@@ -1,0 +1,15 @@
+[Unit]
+Description=WiFi Watchdog - Auto reconnect on disconnection
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /root/wifi_watchdog.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

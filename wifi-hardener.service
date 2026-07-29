@@ -1,0 +1,14 @@
+[Unit]
+Description=WiFi Hardening - Disable power save on boot
+After=network.target
+Before=wifi-watchdog.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /root/wifi-hardener.sh
+RemainAfterExit=yes
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
