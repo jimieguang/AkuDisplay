@@ -34,7 +34,7 @@ lvgl_project/        全部 C 源码 + Makefile + lv_conf.h
 ├── OPS.md           运维手册（服务管理、截图调试、回滚、FAQ）
 └── drivers/         fbdev / evdev 驱动
 tools/               配套工具：press.py 按键注入、fb2png.ps1 截图转 PNG、
-                     b64decode.ps1 / md5local.ps1 传输对账、uac_vol_sync.py PC 端音量同步
+                     b64decode.ps1 / md5local.ps1 传输对账
 lvgl_aku.service     systemd 服务单元
 wifi-hardener.*      开机 WiFi 省电关闭（oneshot）
 wifi_watchdog.sh     WiFi 看门狗（断联自动重连/兜底热点）+ wifi-watchdog.service

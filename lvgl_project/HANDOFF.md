@@ -193,6 +193,15 @@ lv_conf.h       LVGL 配置（16bpp；LV_USE_FREETYPE=1、LV_USE_IMG=1）
   故 `ui_apps.c` 里是 `cd /opt/aku/web && ./audio_start.sh &`。
   该脚本在无 USB host 拉流时有 **200ms 忙等待循环打满单核 CPU** 的固有隐患（曾导致设备重启），
   用户明确要求**保留**（为延迟最优化），勿改。
+- **UAC 音量（v0.8，2026-08-02 实测定案）**：`uac_bridge` 在数据通路应用 Windows 滑块音量。
+  机制：Windows 滑块 → USB Feature Unit 控件镜像（`PCM Capture Volume`，0..100 → −100..0 dB）
+  → bridge 每 ~100ms 读一次 → 采样增益/静音。**内核 v6.1 不应用增益，Windows 也不缩放
+  USB 数据**，所以必须在 bridge 里做；设备侧 `amixer -c 1` 改音量只是状态镜像、不影响声音。
+  实测：Windows 100% → 增益 1.0；50% → 0.2818（−11dB）；0%/静音 → 0。UI 音量键仍只控
+  `Power Amplifier`（本地），符合"不需要音量同步"的要求。
+- **musb 热解绑大坑**：多次 unbind/rebind UDC（UAC↔ADB 切换、UAC 开关反复操作）会把
+  USB OUT 端弄坏——Windows 播放端点失效（`AUDCLNT_E_DEVICE_INVALIDATED`，采集/控件正常、
+  唯独播放打不开），**只能重启设备恢复**。UAC 开关勿设计成高频操作；出问题先重启。
 - **Emotion 页**：外部 `play_bmp_sequence` 直接写 fb0，进入前 `fbdev_pause(1)` 让 LVGL 停画，退出恢复。
 - 相关系统服务：`wifi-watchdog` / `btstart` / `wifi-hardener` / `akuweb`(端口80) 保持运行。
 

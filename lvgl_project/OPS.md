@@ -82,6 +82,35 @@ make -j1
 echo "systemctl restart lvgl_aku; sleep 1; systemctl is-active lvgl_aku" | C:\path\to\adb.exe shell
 ```
 
+### uac_bridge（UAC 音量增益，v0.8）—— 独立于 UI 构建部署
+
+`uac_bridge` 是把 USB 音频搬运到 codec 的独立进程，v0.8 起在数据通路应用
+Windows 滑块音量（读 card1 `PCM Capture Volume` 镜像 0..100 → −100..0 dB）。
+它**不属于** `lvgl_aku` 二进制，源码在同一目录，需要 `libasound2-dev`。
+
+```powershell
+# 1. 推源码（改了 uac_bridge.c 时）
+C:\path\to\adb.exe push "C:\path\to\uac_bridge.c" /opt/aku/lvgl/uac_bridge.c
+
+# 2. 设备端编译（产物就在 audio_start.sh 期望的 /opt/aku/lvgl/uac_bridge）
+echo "cd /opt/aku/lvgl && make uac_bridge && ls -la uac_bridge" | C:\path\to\adb.exe shell
+
+# 3. 重启 UAC 使新二进制生效（UI 里关一次再开一次，或直接）
+echo "cd /opt/aku/web && ./audio_stop.sh; sleep 2; ./audio_start.sh &" | C:\path\to\adb.exe shell
+```
+
+验证音量跟随：
+
+```bash
+# Windows 上拖动 "AC Interface" 音量滑块，然后：
+amixer -c 1 cget 'PCM Capture Volume'   # 应跟随滑块（如 40% -> 86）
+tail -5 /tmp/audio_start.log            # bridge 日志：host vol=86 gain=0.1995
+```
+
+> 注意：设备侧 `amixer -c 1` 改这个控件**不影响声音**（内核 v6.1 不应用增益、
+> Windows 也不缩放 USB 数据），增益只在 bridge 内生效；UI 音量键仍只控制
+> `Power Amplifier`（本地 0..63），与 Windows 滑块互不干扰。
+
 ### 服务管理 / 回滚
 
 ```bash
@@ -255,5 +284,5 @@ C:\Users\Administrator\Desktop\AkuBot\lvgl_project\
 ```
 
 > 工程 `tools/` 目录另有调试工具：`press.py`（按键注入）、`fb2png.ps1`（截图转 PNG）、`b64decode.ps1`
-> （base64 下载解码）、`md5local.ps1`（源码 md5 对账）、`uac_vol_sync.py`（PC 端 UAC 音量同步）；
+> （base64 下载解码）、`md5local.ps1`（源码 md5 对账）；
 > 根目录有 `lvgl_aku.service`（服务单元本地副本）与 WiFi 加固/看门狗脚本。
